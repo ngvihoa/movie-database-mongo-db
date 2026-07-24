@@ -1,0 +1,37 @@
+{
+  "metadata": {
+    "rows": 45466,
+    "uniqueValidTmdbIds": 45433,
+    "badIdRows": 3,
+    "duplicateIdRows": 30
+  },
+  "links": {
+    "rows": 9125,
+    "uniqueMovieLensIds": 9125,
+    "missingTmdbIds": 13,
+    "duplicateMovieLensIds": 0
+  },
+  "ratingsSmall": {
+    "rows": 100004,
+    "users": 671,
+    "distinctMovies": 9066,
+    "joinedRows": 99810,
+    "joinedPercent": 99.806,
+    "rejectedRows": 194,
+    "missingLinkRows": 71,
+    "missingMetadataRows": 123,
+    "duplicateUserMoviePairs": 0,
+    "distribution": {
+      "0.5": 1101,
+      "1.0": 3326,
+      "1.5": 1687,
+      "2.0": 7271,
+      "2.5": 4449,
+      "3.0": 20064,
+      "3.5": 10538,
+      "4.0": 28750,
+      "4.5": 7723,
+      "5.0": 15095
+    }
+  }
+}
