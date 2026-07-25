@@ -135,7 +135,7 @@ Việc lặp dữ liệu trong MongoDB vì vậy là kết quả của việc t�
 
 ## 3.1. Danh sách collection
 
-Thiết kế gồm 11 collection:
+Kiến trúc nghiệp vụ chính thức gồm 11 collection:
 
 ```text
 1. movies
@@ -151,7 +151,7 @@ Thiết kế gồm 11 collection:
 11. companyGenreStats
 ```
 
-Trong đó, 8 collection đầu là collection dữ liệu chính, `companyMovies` là collection tối ưu cho truy vấn theo công ty, còn `demographicGenreStats` và `companyGenreStats` là collection tổng hợp phục vụ báo cáo.
+Trong đó, 8 collection đầu nhận dữ liệu trực tiếp hoặc dữ liệu danh mục được chuẩn hóa trong ETL. `companyMovies`, `demographicGenreStats` và `companyGenreStats` là dữ liệu dẫn xuất được tạo lại bởi `scripts/aggregate/rebuild_derived.js`.
 
 ---
 
@@ -177,7 +177,7 @@ Các giá trị như tên thể loại, tên công ty, tên phim hoặc thống 
 
 # 4. Thiết kế chi tiết
 
-Mọi collection nhập từ dataset giữ ID nguồn trong `sourceIds`. MongoDB `_id` được dùng cho quan hệ nội bộ, còn ID TMDB/MovieLens/IMDb dùng để truy vết, ánh xạ ETL và chống nhập trùng.
+Các collection nghiệp vụ nhập từ dataset giữ ID nguồn trong `sourceIds`. MongoDB `_id` được dùng cho quan hệ nội bộ, còn ID TMDB/MovieLens/IMDb dùng để truy vết, ánh xạ ETL và chống nhập trùng. Các collection dẫn xuất dùng khóa ObjectId tham chiếu từ collection nguồn.
 
 ## 4.1. Collection `movieCollections`
 
@@ -196,7 +196,7 @@ Collection này lưu các bộ hoặc chuỗi phim.
 
 Một bộ phim có thể chứa nhiều phim. Một phim có thể không thuộc bộ phim nào.
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.movieCollections.createIndex({ collectionName: 1 }, { unique: true });
@@ -222,7 +222,7 @@ Collection này lưu danh mục thể loại chuẩn.
 
 Collection này giúp tránh tình trạng cùng một thể loại nhưng có nhiều cách ghi khác nhau.
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.genres.createIndex({ genreName: 1 }, { unique: true });
@@ -256,16 +256,11 @@ Collection này lưu danh mục công ty sản xuất và một số chỉ số 
 
 `companyStats` là dữ liệu tổng hợp, có thể cập nhật định kỳ.
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.companies.createIndex({ "sourceIds.tmdbId": 1 }, { unique: true });
 db.companies.createIndex({ companyName: 1 });
-
-db.companies.createIndex({
-  "companyStats.totalRevenue": -1,
-  "companyStats.revenueBudgetRatio": -1,
-});
 ```
 
 ---
@@ -285,6 +280,7 @@ db.companies.createIndex({
   },
 
   title: "The Dark Knight",
+  originalTitle: "The Dark Knight",
   overview: "Batman faces a criminal mastermind...",
   releaseDate: ISODate("2008-07-18T00:00:00Z"),
   runtime: 152,
@@ -346,7 +342,7 @@ db.companies.createIndex({
 
 `ratingStats` được tính từ `ratings_small.csv` thông qua collection `ratings`. `sourceRatingStats` giữ `vote_average` và `vote_count` từ metadata TMDB; hai thang điểm không được trộn lẫn.
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.movies.createIndex({ title: 1 });
@@ -361,8 +357,6 @@ db.movies.createIndex({
 });
 
 db.movies.createIndex({ "companies.companyId": 1 });
-
-db.movies.createIndex({ "collection.collectionId": 1 });
 
 db.movies.createIndex({
   "genres.genreName": 1,
@@ -405,10 +399,10 @@ Under 18
 55+
 ```
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
-db.users.createIndex({ email: 1 }, { unique: true });
+db.users.createIndex({ "sourceIds.movieLensUserId": 1 }, { unique: true });
 
 db.users.createIndex({
   country: 1,
@@ -462,7 +456,7 @@ Mỗi document là một đánh giá của một người dùng cho một phim.
 
 `userSnapshot` và `movieSnapshot` giúp chạy báo cáo theo quốc gia, nhóm tuổi và thể loại mà không phải liên kết nhiều collection.
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.ratings.createIndex(
@@ -481,11 +475,6 @@ db.ratings.createIndex({
 });
 
 db.ratings.createIndex({ "movieSnapshot.genres.genreName": 1 });
-
-db.ratings.createIndex({
-  userId: 1,
-  ratedAt: -1,
-});
 
 db.ratings.createIndex({
   "userSnapshot.country": 1,
@@ -526,10 +515,11 @@ Collection này lưu danh mục cá nhân và thống kê sự nghiệp.
 
 Không nên đặt `personName` là duy nhất vì có thể tồn tại nhiều người cùng tên.
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.people.createIndex({ personName: 1 });
+db.people.createIndex({ "sourceIds.tmdbId": 1 }, { unique: true });
 
 db.people.createIndex({
   "careerStats.movieCount": -1,
@@ -608,7 +598,7 @@ Ví dụ với diễn viên:
 }
 ```
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.personCredits.createIndex({
@@ -620,11 +610,6 @@ db.personCredits.createIndex({
 db.personCredits.createIndex({
   personName: 1,
   roleName: 1,
-});
-
-db.personCredits.createIndex({
-  movieId: 1,
-  creditOrder: 1,
 });
 
 db.personCredits.createIndex({ "sourceIds.creditId": 1 }, { unique: true });
@@ -677,7 +662,7 @@ Một phim có nhiều công ty sẽ tạo nhiều document trong `companyMovies
 
 Do dữ liệu gốc không cho biết doanh thu thực tế được chia cho từng công ty như thế nào, trường `revenue` được hiểu là doanh thu của phim mà công ty có tham gia sản xuất.
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.companyMovies.createIndex(
@@ -690,15 +675,6 @@ db.companyMovies.createIndex(
   },
 );
 
-db.companyMovies.createIndex({
-  companyId: 1,
-  "genres.genreId": 1,
-});
-
-db.companyMovies.createIndex({
-  "financials.revenue": -1,
-  "financials.revenueBudgetRatio": -1,
-});
 ```
 
 ---
@@ -730,7 +706,7 @@ Mỗi document đại diện cho một tổ hợp:
 Genre + Country + AgeGroup
 ```
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.demographicGenreStats.createIndex(
@@ -748,6 +724,7 @@ db.demographicGenreStats.createIndex({
   country: 1,
   ageGroup: 1,
   averageRating: -1,
+  ratingCount: -1,
 });
 ```
 
@@ -783,7 +760,7 @@ Collection này lưu kết quả tổng hợp theo công ty và thể loại.
 
 `overallRevenueBudgetRatio` được tính bằng tổng Revenue chia tổng Budget và nên được dùng để xếp hạng công ty.
 
-Index đề xuất:
+Index đang triển khai:
 
 ```javascript
 db.companyGenreStats.createIndex(
@@ -796,10 +773,7 @@ db.companyGenreStats.createIndex(
   },
 );
 
-db.companyGenreStats.createIndex({
-  totalRevenue: -1,
-  overallRevenueBudgetRatio: -1,
-});
+db.companyGenreStats.createIndex({ genreName: 1, companyId: 1 });
 ```
 
 ---
@@ -864,9 +838,9 @@ demographicGenreStats
 companyGenreStats
 ```
 
-`companyMovies` có thể được tái tạo từ `movies`, nhưng được giữ lại để tăng tốc các truy vấn theo công ty.
+`companyMovies` được xóa và tái tạo từ `movies` trong mỗi lần chạy rebuild, nhưng được giữ lại giữa các lần rebuild để tăng tốc các truy vấn theo công ty.
 
-`demographicGenreStats` và `companyGenreStats` có thể được xóa và tạo lại từ dữ liệu gốc.
+`demographicGenreStats` được tái tạo từ `ratings`; `companyGenreStats` được tái tạo từ `companyMovies`.
 
 ---
 
@@ -874,7 +848,7 @@ companyGenreStats
 
 Khi thông tin phim thay đổi, cần cập nhật `movies`, `companyMovies` và các snapshot liên quan.
 
-Khi một đánh giá được thêm, sửa hoặc xóa, cần cập nhật `ratings` trước. Các trường thống kê trong `movies`, `people`, `personCredits`, `companyMovies`, `demographicGenreStats` và `companyGenreStats` có thể được cập nhật sau bằng cron job.
+Khi một đánh giá được thêm, sửa hoặc xóa, cần cập nhật `ratings` trước. Sau đó chạy rebuild để cập nhật `movies.ratingStats`, snapshot `personCredits.movieStats`, `people.careerStats`, `companyMovies.ratingStats` và `demographicGenreStats`. `companyGenreStats` và `companies.companyStats` chỉ phụ thuộc dữ liệu tài chính/phân loại phim, nhưng hiện vẫn được tạo lại trong cùng batch rebuild.
 
 Khi đổi tên thể loại, công ty hoặc bộ phim, cần cập nhật collection nguồn chính và các bản sao đang được nhúng.
 
@@ -891,7 +865,7 @@ companyGenreStats
 
 ---
 
-# 8. Chiến lược cập nhật đề xuất
+# 8. Chiến lược cập nhật hiện tại
 
 ```text
 Cập nhật ngay:
@@ -904,33 +878,25 @@ Cập nhật ngay:
 - companies
 - movieCollections
 
-Cập nhật theo batch hoặc cron:
+Cập nhật theo batch (`make rebuild`):
 - movies.ratingStats
+- personCredits.movieStats
 - people.careerStats
 - companies.companyStats
-- companyMovies.ratingStats
+- companyMovies (toàn bộ document)
 - demographicGenreStats
 - companyGenreStats
 ```
 
-Khuyến nghị: (cái này không cần làm)
-
-```text
-Mỗi giờ:
-- cập nhật movies.ratingStats
-
-Mỗi ngày:
-- cập nhật people.careerStats
-- cập nhật companies.companyStats
-- làm mới demographicGenreStats
-- làm mới companyGenreStats
-```
+Implementation hiện tại không có cron job. Các dữ liệu trên được làm mới theo batch bằng `make rebuild`, chạy `scripts/aggregate/rebuild_derived.js`.
 
 ---
 
 # 9. Lưu ý dữ liệu
 
-Dữ liệu `name`, `email`, `age` và `country` của người dùng không có sẵn đầy đủ trong bộ dữ liệu MovieLens gốc. Cần bổ sung từ nguồn khác hoặc tạo dữ liệu mẫu.
+Dữ liệu `name`, `email`, `age` và `country` không có trong `ratings_small.csv`. ETL hiện tạo 671 hồ sơ người dùng theo cách xác định từ MovieLens user ID với seed mặc định `2026`; chạy lại cùng seed cho kết quả nhân khẩu học giống nhau.
+
+Ngoài 11 collection nghiệp vụ, implementation có collection kỹ thuật `etlRejects` để ghi các dòng bị loại và hỗ trợ kiểm soát chất lượng import. Đây là audit log vận hành ETL, không thuộc ERD, quan hệ nghiệp vụ hoặc danh sách collection chính thức của kiến trúc.
 
 Một phim có thể thuộc nhiều thể loại. Khi tính doanh thu theo thể loại, toàn bộ doanh thu phim có thể được tính cho từng thể loại mà phim thuộc về. Vì vậy không nên cộng tổng doanh thu giữa các thể loại để suy ra doanh thu toàn hệ thống.
 
@@ -942,7 +908,7 @@ Một người có thể có nhiều vai trò trong cùng một phim. Khi tính 
 
 # 10. Kết luận
 
-Kiến trúc cuối cùng gồm 11 collection:
+Kiến trúc nghiệp vụ chính thức gồm 11 collection:
 
 ```text
 movies
