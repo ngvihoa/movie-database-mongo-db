@@ -15,7 +15,7 @@ PYTHON := .venv/bin/python
 
 export MONGODB_URI MONGODB_DATABASE DATASET_DIR ETL_BATCH_SIZE USER_SEED
 
-.PHONY: help inspect setup import rebuild init query-1 query-2 query-3 query-4 query-5 query-6 benchmark
+.PHONY: help inspect setup import rebuild init query-1 query-2 query-3 query-4 query-5 query-6 query-test benchmark
 
 help:
 	@printf '%s\n' \
@@ -26,6 +26,7 @@ help:
 		'make query-4 MIN_RATINGS=20       Top genre by demographic' \
 		'make query-5 GENRE_NAME="Action" Country and age report' \
 		'make query-6                      Company investment analysis' \
+		'make query-test                   Test query' \
 		'make benchmark                    Benchmark all queries'
 
 inspect:
@@ -43,22 +44,25 @@ rebuild:
 init: setup import rebuild
 
 query-1:
-	mongosh "$(MONGODB_URL)" scripts/queries/query_01_top_action_movies.js
+	mongosh "$(MONGODB_URL)" scripts/queries/query_01_top_action_movies.mongodb.js
 
 query-2:
-	PERSON_NAME="$(PERSON_NAME)" mongosh "$(MONGODB_URL)" scripts/queries/query_02_person_career.js
+	PERSON_NAME="$(PERSON_NAME)" mongosh "$(MONGODB_URL)" scripts/queries/query_02_person_career.mongodb.js
 
 query-3:
-	LIMIT="$(LIMIT)" mongosh "$(MONGODB_URL)" scripts/queries/query_03_most_active_people.js
+	LIMIT="$(LIMIT)" mongosh "$(MONGODB_URL)" scripts/queries/query_03_most_active_people.mongodb.js
 
 query-4:
-	MIN_RATINGS="$(MIN_RATINGS)" mongosh "$(MONGODB_URL)" scripts/queries/query_04_top_genre_by_demographic.js
+	MIN_RATINGS="$(MIN_RATINGS)" mongosh "$(MONGODB_URL)" scripts/queries/query_04_top_genre_by_demographic.mongodb.js
 
 query-5:
-	GENRE_NAME="$(GENRE_NAME)" mongosh "$(MONGODB_URL)" scripts/queries/query_05_country_age_report.js
+	GENRE_NAME="$(GENRE_NAME)" mongosh "$(MONGODB_URL)" scripts/queries/query_05_country_age_report.mongodb.js
 
 query-6:
-	mongosh "$(MONGODB_URL)" scripts/queries/query_06_company_investment.js
+	mongosh "$(MONGODB_URL)" scripts/queries/query_06_company_investment.mongodb.js
+
+query-test:
+	mongosh "$(MONGODB_URL)" scripts/queries/query_test.mongodb.js
 
 benchmark:
 	mongosh "$(MONGODB_URL)" --quiet scripts/validation/benchmark_queries.js
