@@ -1,4 +1,4 @@
-// Run: mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_01_top_action_movies.js
+// Run: make query-1
 const database = db.getSiblingDB(process.env.MONGODB_DATABASE || "movie_analytics");
 database.movies.find(
   {"genres.genreName": "Action", "ratingStats.ratingCount": {$gte: 50}},

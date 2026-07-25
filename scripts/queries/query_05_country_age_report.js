@@ -1,4 +1,4 @@
-// Run: GENRE_NAME="Action" mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_05_country_age_report.js
+// Run: make query-5 GENRE_NAME="Action"
 const database = db.getSiblingDB(process.env.MONGODB_DATABASE || "movie_analytics");
 const genreName = process.env.GENRE_NAME || "Action";
 const rows = database.ratings.aggregate([

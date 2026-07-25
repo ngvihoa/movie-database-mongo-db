@@ -27,7 +27,7 @@ python -m venv .venv
 cp .env.example .env
 ```
 
-Các script đọc biến môi trường trực tiếp từ shell; file `.env` là mẫu cấu hình và không tự động được nạp.
+`Makefile` tự động nạp `.env` nếu file tồn tại. Nếu không có `.env`, các lệnh `make` sử dụng cấu hình mặc định trong `.env.example`, gồm MongoDB tại `mongodb://localhost:27017/movie_analytics`.
 
 ## Kiểm định dataset
 
@@ -48,33 +48,32 @@ Kết quả chuẩn hiện tại là 100.004 ratings đầu vào, 99.810 ratings
 ## Khởi tạo và import
 
 ```bash
-export MONGODB_URI=mongodb://localhost:27017
-export MONGODB_DATABASE=movie_analytics
-
-.venv/bin/python scripts/setup/setup_database.py
-.venv/bin/python scripts/etl/import_data.py
-mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/aggregate/rebuild_derived.js
+make init
 ```
+
+Có thể chạy riêng từng bước bằng `make setup`, `make import` và `make rebuild`.
 
 ETL dùng upsert nên có thể chạy lại. Dữ liệu nhân khẩu học của 671 users được sinh xác định với seed `2026` và được đánh dấu `isSynthetic: true`.
 
 ## Chạy truy vấn
 
 ```bash
-mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_01_top_action_movies.js
-PERSON_NAME="Christopher Nolan" mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_02_person_career.js
-mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_03_most_active_people.js
-MIN_RATINGS=20 mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_04_top_genre_by_demographic.js
-GENRE_NAME="Action" mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_05_country_age_report.js
-mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_06_company_investment.js
+make query-1
+make query-2 PERSON_NAME="Christopher Nolan"
+make query-3 LIMIT=10
+make query-4 MIN_RATINGS=20
+make query-5 GENRE_NAME="Action"
+make query-6
 ```
+
+Chạy `make help` để xem nhanh danh sách lệnh. Các tham số trên lệnh được ưu tiên hơn giá trị trong `.env` và giá trị mặc định.
 
 Q3 trả hai bảng riêng cho Actor và Director. Q4 dùng ngưỡng mặc định 20 ratings. Q5 trả báo cáo phân cấp và Q6 trả đối tượng pivot kèm danh sách năm thể loại doanh thu cao nhất.
 
 ## Đo hiệu năng
 
 ```bash
-mongosh "$MONGODB_URI/$MONGODB_DATABASE" --quiet scripts/validation/benchmark_queries.js
+make benchmark
 ```
 
 Kết quả và phân tích index được ghi tại `docs/performance-report.md`.

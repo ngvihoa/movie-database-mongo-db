@@ -1,4 +1,4 @@
-// Run: mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_03_most_active_people.js
+// Run: make query-3 LIMIT=10
 const database = db.getSiblingDB(process.env.MONGODB_DATABASE || "movie_analytics");
 const limit = Number(process.env.LIMIT || 10);
 

@@ -1,4 +1,4 @@
-// Run: PERSON_NAME="Christopher Nolan" mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_02_person_career.js
+// Run: make query-2 PERSON_NAME="Christopher Nolan"
 const database = db.getSiblingDB(process.env.MONGODB_DATABASE || "movie_analytics");
 const personName = process.env.PERSON_NAME || "Christopher Nolan";
 database.personCredits.aggregate([

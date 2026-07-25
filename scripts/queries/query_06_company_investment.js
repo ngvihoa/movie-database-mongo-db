@@ -1,4 +1,4 @@
-// Run: mongosh "$MONGODB_URI/$MONGODB_DATABASE" scripts/queries/query_06_company_investment.js
+// Run: make query-6
 const database = db.getSiblingDB(process.env.MONGODB_DATABASE || "movie_analytics");
 const topGenres = database.movies.aggregate([
   {$unwind: "$genres"},
