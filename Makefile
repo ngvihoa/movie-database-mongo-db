@@ -9,13 +9,14 @@ PERSON_NAME ?= Christopher Nolan
 LIMIT ?= 10
 MIN_RATINGS ?= 20
 GENRE_NAME ?= Action
+REPORT_OUTPUT ?= reports/movie_analytics.html
 
 MONGODB_URL := $(MONGODB_URI)/$(MONGODB_DATABASE)
 PYTHON := .venv/bin/python
 
 export MONGODB_URI MONGODB_DATABASE DATASET_DIR ETL_BATCH_SIZE USER_SEED
 
-.PHONY: help inspect setup import rebuild init query-1 query-2 query-3 query-4 query-5 query-6 query-test benchmark
+.PHONY: help inspect setup import rebuild init query-1 query-2 query-3 query-4 query-5 query-6 query-test visualize visualize-open benchmark
 
 help:
 	@printf '%s\n' \
@@ -27,6 +28,8 @@ help:
 		'make query-5 GENRE_NAME="Action" Country and age report' \
 		'make query-6                      Company investment analysis' \
 		'make query-test                   Test query' \
+		'make visualize                    Generate the HTML dashboard' \
+		'make visualize-open               Generate and open the HTML dashboard' \
 		'make benchmark                    Benchmark all queries'
 
 inspect:
@@ -63,6 +66,12 @@ query-6:
 
 query-test:
 	mongosh "$(MONGODB_URL)" scripts/queries/query_test.mongodb.js
+
+visualize:
+	$(PYTHON) scripts/visualize/generate_report.py --output "$(REPORT_OUTPUT)" --person-name "$(PERSON_NAME)" --limit "$(LIMIT)" --minimum-ratings "$(MIN_RATINGS)" --genre-name "$(GENRE_NAME)"
+
+visualize-open:
+	$(PYTHON) scripts/visualize/generate_report.py --output "$(REPORT_OUTPUT)" --person-name "$(PERSON_NAME)" --limit "$(LIMIT)" --minimum-ratings "$(MIN_RATINGS)" --genre-name "$(GENRE_NAME)" --open
 
 benchmark:
 	mongosh "$(MONGODB_URL)" --quiet scripts/validation/benchmark_queries.js

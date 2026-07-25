@@ -132,6 +132,32 @@ Chạy `make help` để xem nhanh danh sách lệnh. Các tham số trên lện
 
 Các query in kết quả thành bảng trong terminal. Q3 trả hai bảng riêng cho Actor và Director. Q4 dùng ngưỡng mặc định 20 ratings. Q5 trả báo cáo phân cấp. Q6 trả bảng pivot cho năm thể loại doanh thu cao nhất và phân biệt `N/A (no movies)` với `N/A (missing budget)`.
 
+## Báo cáo HTML
+
+Sinh dashboard HTML chứa KPI, bảng, bar chart và heatmap cho Q1-Q6:
+
+```bash
+make visualize
+```
+
+Báo cáo được ghi mặc định tại `reports/movie_analytics.html` và hoạt động offline. Sinh báo cáo rồi mở ngay bằng trình duyệt mặc định:
+
+```bash
+make visualize-open
+```
+
+Có thể thay đổi tham số giống các query terminal:
+
+```bash
+make visualize PERSON_NAME="Christopher Nolan" LIMIT=10 MIN_RATINGS=20 GENRE_NAME="Action"
+```
+
+Đổi đường dẫn output bằng `REPORT_OUTPUT`:
+
+```bash
+make visualize REPORT_OUTPUT="reports/custom-report.html"
+```
+
 ## Đo hiệu năng
 
 ```bash
