@@ -37,7 +37,7 @@ Các ID nguồn được giữ trong `movies.sourceIds` để truy vết và ch�
 
 ## Users
 
-MovieLens chỉ cung cấp `userId`. Tuổi và quốc gia được sinh bằng seed cố định, có `isSynthetic: true`, và không được trình bày như dữ liệu nhân khẩu học thực tế.
+MovieLens chỉ cung cấp `userId`. Tuổi và quốc gia được sinh bằng seed cố định và không được trình bày như dữ liệu nhân khẩu học thực tế.
 
 ## Ratings
 

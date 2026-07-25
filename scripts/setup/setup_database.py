@@ -39,12 +39,11 @@ VALIDATORS = {
     }},
     "users": {"$jsonSchema": {
         "bsonType": "object",
-        "required": ["sourceIds", "age", "ageGroup", "country", "isSynthetic"],
+        "required": ["sourceIds", "age", "ageGroup", "country"],
         "properties": {
             "age": {"bsonType": "int", "minimum": 0},
             "ageGroup": {"enum": ["Under 18", "18-24", "25-34", "35-44", "45-54", "55+"]},
             "country": {"bsonType": "string"},
-            "isSynthetic": {"bsonType": "bool"},
         },
     }},
     "ratings": {"$jsonSchema": {

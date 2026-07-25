@@ -388,7 +388,6 @@ Collection này lưu thông tin người dùng.
   age: 27,
   ageGroup: "25-34",
   country: "Vietnam",
-  isSynthetic: true,
 
   createdAt: ISODate("2026-01-01T00:00:00Z"),
   updatedAt: ISODate("2026-01-01T00:00:00Z")

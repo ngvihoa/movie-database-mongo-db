@@ -258,7 +258,6 @@ class Importer:
                 "age": age,
                 "ageGroup": age_group,
                 "country": randomizer.choice(COUNTRIES),
-                "isSynthetic": True,
                 "updatedAt": self.now,
             }
             operations.append(UpdateOne(
