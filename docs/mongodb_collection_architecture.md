@@ -111,8 +111,8 @@ erDiagram
 | `COUNTRIES` + `MOVIE_PRODUCTION_COUNTRIES` | `movies.productionCountries[]` | Dữ liệu nhỏ, luôn đọc cùng phim nên embed | Thông tin phim theo quốc gia sản xuất |
 | `USERS` | `users` | Collection nguồn chính; `ageGroup` được tính sẵn | Q4 và Q5 |
 | `RATINGS` | `ratings` | Reference tới user/phim; embed snapshot quốc gia, nhóm tuổi và thể loại | Q1, Q4 và Q5 không cần nhiều `$lookup` |
-| `PEOPLE` | `people` | Collection nguồn người, có `careerStats` tổng hợp | Q3 xếp hạng Actor/Director |
-| `PERSON_CREDITS` | `personCredits` | Thay bảng nối người-phim-vai trò; lặp tên và thống kê phim có chủ đích | Q2 và Q3 |
+| `PEOPLE` | `people` | Collection nguồn chỉ lưu hồ sơ người | Q2 và Q3 lấy tên bằng `$lookup` |
+| `PERSON_CREDITS` | `personCredits` | Thay bảng nối người-phim-vai trò, chỉ giữ reference và thuộc tính vai trò | Q2 và Q3 |
 | Tổng hợp nhân khẩu học | `demographicGenreStats` | Materialized aggregation từ `ratings` | Q4 |
 | Tổng hợp công ty-thể loại | `companyGenreStats` | Materialized aggregation từ `companyMovies` | Q6 |
 
@@ -121,8 +121,8 @@ erDiagram
 | Truy vấn | Quan hệ cần join trong ERD | Cách MongoDB tránh hoặc giảm join |
 |---|---|---|
 | Q1 Top phim theo thể loại | `MOVIES → MOVIE_GENRES → GENRES → RATINGS` | Genre và `ratingStats` được embed trong `movies` |
-| Q2 Sự nghiệp cá nhân | `PEOPLE → PERSON_CREDITS → MOVIES` | `personCredits` chứa snapshot tên phim, vai trò và doanh thu |
-| Q3 Actor/Director nhiều phim | Group `PERSON_CREDITS` theo người và vai trò, join ratings | `people.careerStats` được materialize trước |
+| Q2 Sự nghiệp cá nhân | `PEOPLE → PERSON_CREDITS → MOVIES` | `$lookup` credit và phim từ hồ sơ người để lấy dữ liệu hiện hành |
+| Q3 Actor/Director nhiều phim | Group `PERSON_CREDITS` theo người và vai trò, join phim | `$lookup` `movies` để tính điểm và `people` để lấy tên |
 | Q4 Thể loại cao nhất theo nhân khẩu học | `USERS → RATINGS → MOVIES → MOVIE_GENRES` | Snapshot nằm trong rating và kết quả được materialize vào `demographicGenreStats` |
 | Q5 Quốc gia → nhóm tuổi | Cùng chuỗi join như Q4, thêm subtotal | Một lần scan ratings theo `movieSnapshot.genres`, sau đó dùng `$facet` |
 | Q6 Hiệu quả công ty theo thể loại | `COMPANIES → MOVIE_COMPANIES → MOVIES → MOVIE_GENRES` | `companyMovies` đảo chiều truy vấn và `companyGenreStats` lưu tổng hợp |
@@ -487,7 +487,7 @@ db.ratings.createIndex({
 
 ## 4.7. Collection `people`
 
-Collection này lưu danh mục cá nhân và thống kê sự nghiệp.
+Collection này chỉ lưu hồ sơ cá nhân. Thống kê sự nghiệp được tính từ `personCredits` và `movies` tại thời điểm truy vấn.
 
 ```javascript
 {
@@ -497,19 +497,8 @@ Collection này lưu danh mục cá nhân và thống kê sự nghiệp.
 
   personName: "Christopher Nolan",
 
-  careerStats: {
-    movieCount: 12,
-    actorMovieCount: 0,
-    directorMovieCount: 12,
-    totalRevenue: NumberLong("6200000000"),
-    averageMovieRating: 4.21,
-    actorAverageMovieRating: null,
-    directorAverageMovieRating: 4.21
-  },
-
   createdAt: ISODate("2026-01-01T00:00:00Z"),
-  updatedAt: ISODate("2026-01-01T00:00:00Z"),
-  statsUpdatedAt: ISODate("2026-01-01T00:00:00Z")
+  updatedAt: ISODate("2026-01-01T00:00:00Z")
 }
 ```
 
@@ -520,28 +509,13 @@ Index đang triển khai:
 ```javascript
 db.people.createIndex({ personName: 1 });
 db.people.createIndex({ "sourceIds.tmdbId": 1 }, { unique: true });
-
-db.people.createIndex({
-  "careerStats.movieCount": -1,
-  "careerStats.averageMovieRating": -1,
-});
-
-db.people.createIndex({
-  "careerStats.actorMovieCount": -1,
-  "careerStats.actorAverageMovieRating": -1,
-});
-
-db.people.createIndex({
-  "careerStats.directorMovieCount": -1,
-  "careerStats.directorAverageMovieRating": -1,
-});
 ```
 
 ---
 
 ## 4.8. Collection `personCredits`
 
-Mỗi document thể hiện một vai trò của một người trong một phim.
+Mỗi document thể hiện một vai trò của một người trong một phim. Collection chỉ giữ tham chiếu và thuộc tính của vai trò; tên người và thông tin phim được đọc từ collection nguồn bằng `$lookup`.
 
 ```javascript
 {
@@ -550,10 +524,7 @@ Mỗi document thể hiện một vai trò của một người trong một phim
   sourceIds: { creditId: "52fe4781c3a36847f81398c3" },
 
   personId: ObjectId("..."),
-  personName: "Christopher Nolan",
-
   movieId: ObjectId("..."),
-  movieTitle: "The Dark Knight",
 
   creditType: "CREW",
   roleName: "Director",
@@ -561,12 +532,6 @@ Mỗi document thể hiện một vai trò của một người trong một phim
 
   characterName: null,
   creditOrder: null,
-
-  movieStats: {
-    revenue: NumberLong("1004558444"),
-    averageRating: 4.42,
-    ratingCount: 125000
-  },
 
   createdAt: ISODate("2026-01-01T00:00:00Z"),
   updatedAt: ISODate("2026-01-01T00:00:00Z")
@@ -578,23 +543,14 @@ Ví dụ với diễn viên:
 ```javascript
 {
   personId: ObjectId("..."),
-  personName: "Christian Bale",
-
   movieId: ObjectId("..."),
-  movieTitle: "The Dark Knight",
 
   creditType: "CAST",
   roleName: "Actor",
   department: "Acting",
 
   characterName: "Bruce Wayne / Batman",
-  creditOrder: 0,
-
-  movieStats: {
-    revenue: NumberLong("1004558444"),
-    averageRating: 4.42,
-    ratingCount: 125000
-  }
+  creditOrder: 0
 }
 ```
 
@@ -608,8 +564,9 @@ db.personCredits.createIndex({
 });
 
 db.personCredits.createIndex({
-  personName: 1,
   roleName: 1,
+  personId: 1,
+  movieId: 1,
 });
 
 db.personCredits.createIndex({ "sourceIds.creditId": 1 }, { unique: true });
@@ -848,7 +805,7 @@ companyGenreStats
 
 Khi thông tin phim thay đổi, cần cập nhật `movies`, `companyMovies` và các snapshot liên quan.
 
-Khi một đánh giá được thêm, sửa hoặc xóa, cần cập nhật `ratings` trước. Sau đó chạy rebuild để cập nhật `movies.ratingStats`, snapshot `personCredits.movieStats`, `people.careerStats`, `companyMovies.ratingStats` và `demographicGenreStats`. `companyGenreStats` và `companies.companyStats` chỉ phụ thuộc dữ liệu tài chính/phân loại phim, nhưng hiện vẫn được tạo lại trong cùng batch rebuild.
+Khi một đánh giá được thêm, sửa hoặc xóa, cần cập nhật `ratings` trước. Sau đó chạy rebuild để cập nhật `movies.ratingStats`, `companyMovies.ratingStats` và `demographicGenreStats`. Q2-Q3 đọc dữ liệu người và phim hiện hành qua `$lookup`, nên không có snapshot hay thống kê sự nghiệp cần đồng bộ trong miền người-phim. `companyGenreStats` và `companies.companyStats` chỉ phụ thuộc dữ liệu tài chính/phân loại phim, nhưng hiện vẫn được tạo lại trong cùng batch rebuild.
 
 Khi đổi tên thể loại, công ty hoặc bộ phim, cần cập nhật collection nguồn chính và các bản sao đang được nhúng.
 
@@ -880,8 +837,6 @@ Cập nhật ngay:
 
 Cập nhật theo batch (`make rebuild`):
 - movies.ratingStats
-- personCredits.movieStats
-- people.careerStats
 - companies.companyStats
 - companyMovies (toàn bộ document)
 - demographicGenreStats

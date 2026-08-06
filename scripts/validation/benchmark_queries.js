@@ -46,25 +46,31 @@ const actionPipeline = [
 ];
 
 const personCareerPipeline = [
-  {$match: {personName: "Christopher Nolan", roleName: {$in: ["Actor", "Director"]}}},
-  {$group: {_id: {personId: "$personId", movieId: "$movieId"}, personName: {$first: "$personName"}, movieTitle: {$first: "$movieTitle"}, roles: {$addToSet: "$roleName"}, revenue: {$first: "$movieStats.revenue"}}},
-  {$group: {_id: "$_id.personId", personName: {$first: "$personName"}, movies: {$push: {title: "$movieTitle", roles: "$roles", revenue: "$revenue"}}, totalRevenue: {$sum: "$revenue"}}},
+  {$match: {personName: "Christopher Nolan"}},
+  {$lookup: {from: "personCredits", localField: "_id", foreignField: "personId", as: "credit"}},
+  {$unwind: "$credit"},
+  {$match: {"credit.roleName": {$in: ["Actor", "Director"]}}},
+  {$group: {_id: {personId: "$_id", movieId: "$credit.movieId"}, personName: {$first: "$personName"}, roles: {$addToSet: "$credit.roleName"}}},
+  {$lookup: {from: "movies", localField: "_id.movieId", foreignField: "_id", as: "movie"}},
+  {$set: {movie: {$first: "$movie"}}},
+  {$group: {_id: "$_id.personId", personName: {$first: "$personName"}, movies: {$push: {title: "$movie.title", roles: "$roles", revenue: {$ifNull: ["$movie.revenue", 0]}}}, totalRevenue: {$sum: {$ifNull: ["$movie.revenue", 0]}}}},
   {$project: {_id: 0, personName: 1, movies: 1, totalRevenue: 1}},
 ];
 
-const actorRankingPipeline = [
-  {$match: {"careerStats.actorMovieCount": {$gt: 0}}},
-  {$sort: {"careerStats.actorMovieCount": -1, "careerStats.actorAverageMovieRating": -1}},
-  {$limit: 10},
-  {$project: {_id: 0, personName: 1, movieCount: "$careerStats.actorMovieCount", averageMovieRating: "$careerStats.actorAverageMovieRating"}},
-];
-
-const directorRankingPipeline = [
-  {$match: {"careerStats.directorMovieCount": {$gt: 0}}},
-  {$sort: {"careerStats.directorMovieCount": -1, "careerStats.directorAverageMovieRating": -1}},
-  {$limit: 10},
-  {$project: {_id: 0, personName: 1, movieCount: "$careerStats.directorMovieCount", averageMovieRating: "$careerStats.directorAverageMovieRating"}},
-];
+function rankingPipeline(role) {
+  return [
+    {$match: {roleName: role}},
+    {$group: {_id: {personId: "$personId", movieId: "$movieId"}}},
+    {$lookup: {from: "movies", localField: "_id.movieId", foreignField: "_id", as: "movie"}},
+    {$set: {movie: {$first: "$movie"}}},
+    {$group: {_id: "$_id.personId", movieCount: {$sum: 1}, averageMovieRating: {$avg: {$cond: [{$gt: [{$ifNull: ["$movie.ratingStats.ratingCount", 0]}, 0]}, "$movie.ratingStats.averageRating", null]}}}},
+    {$lookup: {from: "people", localField: "_id", foreignField: "_id", as: "person"}},
+    {$set: {person: {$first: "$person"}}},
+    {$sort: {movieCount: -1, averageMovieRating: -1}},
+    {$limit: 10},
+    {$project: {_id: 0, personName: "$person.personName", movieCount: 1, averageMovieRating: {$round: ["$averageMovieRating", 4]}}},
+  ];
+}
 
 const demographicPipeline = [
   {$match: {ratingCount: {$gte: 20}}},
@@ -100,9 +106,9 @@ const companyPipeline = [
 
 const results = [
   benchmarkAggregate("Q1 Top Action movies", "movies", actionPipeline),
-  benchmarkAggregate("Q2 Person career", "personCredits", personCareerPipeline, {allowDiskUse: true}),
-  benchmarkAggregate("Q3 Actor ranking", "people", actorRankingPipeline),
-  benchmarkAggregate("Q3 Director ranking", "people", directorRankingPipeline),
+  benchmarkAggregate("Q2 Person career", "people", personCareerPipeline, {allowDiskUse: true}),
+  benchmarkAggregate("Q3 Actor ranking", "personCredits", rankingPipeline("Actor"), {allowDiskUse: true}),
+  benchmarkAggregate("Q3 Director ranking", "personCredits", rankingPipeline("Director"), {allowDiskUse: true}),
   benchmarkAggregate("Q4 Top genre by demographic", "demographicGenreStats", demographicPipeline),
   benchmarkAggregate("Q5 Country and age report", "ratings", countryAgePipeline, {allowDiskUse: true}),
   benchmarkAggregate("Q6 Company investment", "companyGenreStats", companyPipeline, {allowDiskUse: true}),

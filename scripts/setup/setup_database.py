@@ -74,6 +74,20 @@ def ensure_collections(database) -> None:
 
 
 def ensure_indexes(database) -> None:
+    obsolete_indexes = {
+        "people": [
+            "careerStats.movieCount_-1_careerStats.averageMovieRating_-1",
+            "careerStats.actorMovieCount_-1_careerStats.actorAverageMovieRating_-1",
+            "careerStats.directorMovieCount_-1_careerStats.directorAverageMovieRating_-1",
+        ],
+        "personCredits": ["personName_1_roleName_1"],
+    }
+    for collection_name, index_names in obsolete_indexes.items():
+        existing = database[collection_name].index_information()
+        for index_name in index_names:
+            if index_name in existing:
+                database[collection_name].drop_index(index_name)
+
     database.movieCollections.create_index("sourceIds.tmdbId", unique=True)
     database.movieCollections.create_index("collectionName", unique=True)
     database.genres.create_index("sourceIds.tmdbId", unique=True)
@@ -106,22 +120,12 @@ def ensure_indexes(database) -> None:
     database.ratings.create_index("movieSnapshot.genres.genreName")
     database.people.create_index("sourceIds.tmdbId", unique=True)
     database.people.create_index("personName")
-    database.people.create_index([
-        ("careerStats.movieCount", DESCENDING),
-        ("careerStats.averageMovieRating", DESCENDING),
-    ])
-    database.people.create_index([
-        ("careerStats.actorMovieCount", DESCENDING),
-        ("careerStats.actorAverageMovieRating", DESCENDING),
-    ])
-    database.people.create_index([
-        ("careerStats.directorMovieCount", DESCENDING),
-        ("careerStats.directorAverageMovieRating", DESCENDING),
-    ])
     database.personCredits.create_index([
         ("personId", ASCENDING), ("roleName", ASCENDING), ("movieId", ASCENDING)
     ])
-    database.personCredits.create_index([("personName", ASCENDING), ("roleName", ASCENDING)])
+    database.personCredits.create_index([
+        ("roleName", ASCENDING), ("personId", ASCENDING), ("movieId", ASCENDING)
+    ])
     database.personCredits.create_index("sourceIds.creditId", unique=True)
     database.companyMovies.create_index([("companyId", ASCENDING), ("movieId", ASCENDING)], unique=True)
     database.demographicGenreStats.create_index([

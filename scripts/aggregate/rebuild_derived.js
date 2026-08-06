@@ -7,19 +7,11 @@ database.ratings.aggregate([
   {$merge: {into: "movies", on: "_id", whenMatched: [{$set: {ratingStats: "$$new.ratingStats", ratingStatsUpdatedAt: "$$new.ratingStatsUpdatedAt"}}], whenNotMatched: "discard"}},
 ], {allowDiskUse: true});
 
-database.personCredits.aggregate([
-  {$lookup: {from: "movies", localField: "movieId", foreignField: "_id", as: "movie"}},
-  {$set: {movie: {$first: "$movie"}}},
-  {$project: {_id: 1, movieStats: {revenue: {$ifNull: ["$movie.revenue", 0]}, averageRating: {$cond: [{$gt: [{$ifNull: ["$movie.ratingStats.ratingCount", 0]}, 0]}, "$movie.ratingStats.averageRating", null]}, ratingCount: {$ifNull: ["$movie.ratingStats.ratingCount", 0]}}}},
-  {$merge: {into: "personCredits", on: "_id", whenMatched: [{$set: {movieStats: "$$new.movieStats"}}], whenNotMatched: "discard"}},
-], {allowDiskUse: true});
-
-database.personCredits.aggregate([
-  {$group: {_id: {personId: "$personId", movieId: "$movieId"}, roles: {$addToSet: "$roleName"}, revenue: {$first: "$movieStats.revenue"}, averageRating: {$first: "$movieStats.averageRating"}}},
-  {$group: {_id: "$_id.personId", movieCount: {$sum: 1}, actorMovieCount: {$sum: {$cond: [{$in: ["Actor", "$roles"]}, 1, 0]}}, directorMovieCount: {$sum: {$cond: [{$in: ["Director", "$roles"]}, 1, 0]}}, totalRevenue: {$sum: "$revenue"}, averageMovieRating: {$avg: "$averageRating"}, actorAverageMovieRating: {$avg: {$cond: [{$in: ["Actor", "$roles"]}, "$averageRating", null]}}, directorAverageMovieRating: {$avg: {$cond: [{$in: ["Director", "$roles"]}, "$averageRating", null]}}}},
-  {$project: {_id: 1, careerStats: {movieCount: "$movieCount", actorMovieCount: "$actorMovieCount", directorMovieCount: "$directorMovieCount", totalRevenue: "$totalRevenue", averageMovieRating: {$round: ["$averageMovieRating", 4]}, actorAverageMovieRating: {$round: ["$actorAverageMovieRating", 4]}, directorAverageMovieRating: {$round: ["$directorAverageMovieRating", 4]}}, statsUpdatedAt: now}},
-  {$merge: {into: "people", on: "_id", whenMatched: [{$set: {careerStats: "$$new.careerStats", statsUpdatedAt: "$$new.statsUpdatedAt"}}], whenNotMatched: "discard"}},
-], {allowDiskUse: true});
+database.people.updateMany({}, {$unset: {careerStats: "", statsUpdatedAt: ""}});
+database.personCredits.updateMany(
+  {},
+  {$unset: {personName: "", movieTitle: "", movieStats: ""}},
+);
 
 database.companyMovies.deleteMany({});
 database.movies.aggregate([

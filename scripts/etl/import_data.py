@@ -206,35 +206,28 @@ class Importer:
 
         self.upsert_catalog("people", "personName", people)
         person_ids = self.source_id_map("people")
-        movie_info = {
-            document["sourceIds"]["tmdbId"]: document
-            for document in self.db.movies.find({}, {"sourceIds.tmdbId": 1, "title": 1, "revenue": 1, "ratingStats": 1})
-        }
         operations = []
         for tmdb_movie_id, tmdb_person_id, credit_type, role, department, item in credit_rows:
             credit_id = item.get("credit_id") or f"{credit_type}:{tmdb_person_id}:{tmdb_movie_id}:{item.get('character', '')}"
-            movie = movie_info[tmdb_movie_id]
             document = {
                 "sourceIds": {"creditId": credit_id},
                 "personId": person_ids[tmdb_person_id],
-                "personName": people[tmdb_person_id],
                 "movieId": movie_ids[tmdb_movie_id],
-                "movieTitle": movie["title"],
                 "creditType": credit_type,
                 "roleName": role,
                 "department": department,
                 "characterName": item.get("character") if credit_type == "CAST" else None,
                 "creditOrder": item.get("order") if credit_type == "CAST" else None,
-                "movieStats": {
-                    "revenue": movie.get("revenue", 0),
-                    "averageRating": movie.get("ratingStats", {}).get("averageRating", 0.0),
-                    "ratingCount": movie.get("ratingStats", {}).get("ratingCount", 0),
-                },
                 "updatedAt": self.now,
             }
             operations.append(UpdateOne(
                 {"sourceIds.creditId": credit_id},
-                {"$set": document, "$setOnInsert": {"createdAt": self.now}}, upsert=True
+                {
+                    "$set": document,
+                    "$unset": {"personName": "", "movieTitle": "", "movieStats": ""},
+                    "$setOnInsert": {"createdAt": self.now},
+                },
+                upsert=True,
             ))
             if len(operations) >= self.batch_size:
                 flush(self.db.personCredits, operations)

@@ -40,16 +40,12 @@ db.movies.createIndex({
   "ratingStats.ratingCount": -1
 });
 
-db.personCredits.createIndex({personName: 1, roleName: 1});
+db.people.createIndex({personName: 1});
 
-db.people.createIndex({
-  "careerStats.actorMovieCount": -1,
-  "careerStats.actorAverageMovieRating": -1
-});
-
-db.people.createIndex({
-  "careerStats.directorMovieCount": -1,
-  "careerStats.directorAverageMovieRating": -1
+db.personCredits.createIndex({
+  roleName: 1,
+  personId: 1,
+  movieId: 1
 });
 
 db.ratings.createIndex({"movieSnapshot.genres.genreName": 1});
@@ -64,16 +60,16 @@ db.demographicGenreStats.createIndex({
 db.companyGenreStats.createIndex({genreName: 1, companyId: 1});
 ```
 
-Q3 được đổi thứ tự thành `$match` → `$sort` → `$limit` → `$project` để MongoDB dừng sau 20 khóa đầu tiên.
+Q2 bắt đầu từ `people.personName`, sau đó lookup credit và phim. Q3 dùng index theo vai trò để group các cặp người-phim, rồi lookup `movies` và `people`; kết quả không phụ thuộc thống kê lưu sẵn.
 
 ## 4. Kết quả sau khi tối ưu
 
 | Truy vấn | Kết quả | Thời gian explain | Documents examined | Keys examined | Index chính |
 |---|---:|---:|---:|---:|---|
 | Q1 Top phim Action | 10 | <1 ms | 10 | 29 | `genres.genreName_1_ratingStats.averageRating_-1_ratingStats.ratingCount_-1` |
-| Q2 Sự nghiệp cá nhân | 1 | 1 ms | 14 | 14 | `personName_1_roleName_1` |
-| Q3 Xếp hạng Actor | 10 | <1 ms | 10 | 10 | `careerStats.actorMovieCount_-1_careerStats.actorAverageMovieRating_-1` |
-| Q3 Xếp hạng Director | 10 | <1 ms | 10 | 10 | `careerStats.directorMovieCount_-1_careerStats.directorAverageMovieRating_-1` |
+| Q2 Sự nghiệp cá nhân | 1 | 1 ms | 1 | 1 | `personName_1` |
+| Q3 Xếp hạng Actor | 10 | 8.873 ms | 560.837 | 1.122.881 | `roleName_1_personId_1_movieId_1`, `_id_` |
+| Q3 Xếp hạng Director | 10 | 761 ms | 48.999 | 97.998 | `roleName_1_personId_1_movieId_1`, `_id_` |
 | Q4 Thể loại theo nhân khẩu học | 36 | 3 ms | 696 | 696 | `country_1_ageGroup_1_averageRating_-1_ratingCount_-1` |
 | Q5 Báo cáo quốc gia và tuổi | 1 báo cáo | 88 ms | 25.653 | 25.653 | `movieSnapshot.genres.genreName_1` |
 | Q6 Hiệu quả công ty | 5 | 448 ms | 60.857 | 60.857 | `genreName_1_companyId_1`, `_id_` |
@@ -86,11 +82,11 @@ Index bắt đầu bằng tên thể loại, tiếp theo là thứ tự điểm 
 
 ### Q2
 
-Index `(personName, roleName)` giảm số document đọc từ 611.043 xuống đúng 14 credits của Christopher Nolan. Các bước group còn lại thực hiện trên tập dữ liệu rất nhỏ.
+Index `people.personName` xác định đúng hồ sơ Christopher Nolan trước khi lookup 14 phim qua `personCredits` và `movies`. Tên người, tên phim và doanh thu đều được đọc từ collection nguồn.
 
 ### Q3
 
-Hai compound index khớp riêng thứ tự xếp hạng Actor và Director. Điểm trung bình của mỗi bảng chỉ tính các phim thuộc đúng vai trò. Sau khi chuyển `$project` xuống sau `$limit`, mỗi bảng chỉ cần đọc 10 khóa và 10 document.
+Compound index `(roleName, personId, movieId)` hỗ trợ lọc vai trò và group theo người-phim. Vì không còn `careerStats`, truy vấn phải xử lý toàn bộ credit của vai trò tương ứng và lookup phim để tính điểm; đây là chi phí rõ ràng của mô hình chuẩn hóa đã chọn.
 
 ### Q4
 

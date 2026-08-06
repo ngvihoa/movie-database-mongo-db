@@ -47,24 +47,35 @@ def collect_data(database, person_name, limit, minimum_ratings, genre_name):
         {"$project": {"_id": 0, "title": 1, "averageRating": "$ratingStats.averageRating", "ratingCount": "$ratingStats.ratingCount"}},
     ]))
 
-    q2 = list(database.personCredits.aggregate([
-        {"$match": {"personName": person_name, "roleName": {"$in": ["Actor", "Director"]}}},
-        {"$group": {"_id": {"personId": "$personId", "movieId": "$movieId"}, "personName": {"$first": "$personName"}, "movieTitle": {"$first": "$movieTitle"}, "roles": {"$addToSet": "$roleName"}, "revenue": {"$first": "$movieStats.revenue"}}},
-        {"$group": {"_id": "$_id.personId", "personName": {"$first": "$personName"}, "movies": {"$push": {"title": "$movieTitle", "roles": "$roles", "revenue": "$revenue"}}, "totalRevenue": {"$sum": "$revenue"}}},
+    q2 = list(database.people.aggregate([
+        {"$match": {"personName": person_name}},
+        {"$lookup": {"from": "personCredits", "localField": "_id", "foreignField": "personId", "as": "credit"}},
+        {"$unwind": "$credit"},
+        {"$match": {"credit.roleName": {"$in": ["Actor", "Director"]}}},
+        {"$group": {"_id": {"personId": "$_id", "movieId": "$credit.movieId"}, "personName": {"$first": "$personName"}, "roles": {"$addToSet": "$credit.roleName"}}},
+        {"$lookup": {"from": "movies", "localField": "_id.movieId", "foreignField": "_id", "as": "movie"}},
+        {"$set": {"movie": {"$first": "$movie"}}},
+        {"$group": {"_id": "$_id.personId", "personName": {"$first": "$personName"}, "movies": {"$push": {"title": "$movie.title", "roles": "$roles", "revenue": {"$ifNull": ["$movie.revenue", 0]}}}, "totalRevenue": {"$sum": {"$ifNull": ["$movie.revenue", 0]}}}},
         {"$project": {"_id": 0, "personName": 1, "movies": 1, "totalRevenue": 1}},
     ], allowDiskUse=True))
 
-    def ranking(count_field, rating_field):
-        return list(database.people.aggregate([
-            {"$match": {count_field: {"$gt": 0}}},
-            {"$sort": {count_field: -1, rating_field: -1}},
+    def ranking(role):
+        return list(database.personCredits.aggregate([
+            {"$match": {"roleName": role}},
+            {"$group": {"_id": {"personId": "$personId", "movieId": "$movieId"}}},
+            {"$lookup": {"from": "movies", "localField": "_id.movieId", "foreignField": "_id", "as": "movie"}},
+            {"$set": {"movie": {"$first": "$movie"}}},
+            {"$group": {"_id": "$_id.personId", "movieCount": {"$sum": 1}, "averageMovieRating": {"$avg": {"$cond": [{"$gt": [{"$ifNull": ["$movie.ratingStats.ratingCount", 0]}, 0]}, "$movie.ratingStats.averageRating", None]}}}},
+            {"$lookup": {"from": "people", "localField": "_id", "foreignField": "_id", "as": "person"}},
+            {"$set": {"person": {"$first": "$person"}}},
+            {"$sort": {"movieCount": -1, "averageMovieRating": -1}},
             {"$limit": limit},
-            {"$project": {"_id": 0, "personName": 1, "movieCount": f"${count_field}", "averageMovieRating": f"${rating_field}"}},
-        ]))
+            {"$project": {"_id": 0, "personName": "$person.personName", "movieCount": 1, "averageMovieRating": {"$round": ["$averageMovieRating", 4]}}},
+        ], allowDiskUse=True))
 
     q3 = {
-        "actors": ranking("careerStats.actorMovieCount", "careerStats.actorAverageMovieRating"),
-        "directors": ranking("careerStats.directorMovieCount", "careerStats.directorAverageMovieRating"),
+        "actors": ranking("Actor"),
+        "directors": ranking("Director"),
     }
 
     q4 = list(database.demographicGenreStats.aggregate([

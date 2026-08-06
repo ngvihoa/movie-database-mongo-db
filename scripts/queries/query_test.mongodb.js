@@ -40,5 +40,34 @@ function printTable(result) {
 
 /* ----------------------------------Query---------------------------------- */
 
-const result = database.users.find().limit(10);
+const result = database.personCredits.aggregate([
+  {
+    $group: {
+      _id: "$personId",
+      creditCount: { $sum: 1 },
+      movieIds: { $addToSet: "$movieId" },
+      roles: { $addToSet: "$roleName" }
+    }
+  },
+  {
+    $lookup: {
+      from: "people",
+      localField: "_id",
+      foreignField: "_id",
+      as: "person"
+    }
+  },
+  { $set: { personName: { $first: "$person.personName" } } },
+  {
+    $project: {
+      _id: 0,
+      personName: 1,
+      creditCount: 1,
+      movieCount: { $size: "$movieIds" },
+      roles: 1
+    }
+  },
+  { $sort: { creditCount: -1 } },
+  { $limit: 20 }
+]);
 printTable(result);
