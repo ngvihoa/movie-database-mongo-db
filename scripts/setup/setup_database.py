@@ -14,10 +14,13 @@ COLLECTIONS = [
     "ratings",
     "people",
     "personCredits",
+    "etlRejects",
+]
+
+OBSOLETE_COLLECTIONS = [
     "companyMovies",
     "demographicGenreStats",
     "companyGenreStats",
-    "etlRejects",
 ]
 
 VALIDATORS = {
@@ -61,6 +64,9 @@ VALIDATORS = {
 
 def ensure_collections(database) -> None:
     existing = set(database.list_collection_names())
+    for name in OBSOLETE_COLLECTIONS:
+        if name in existing:
+            database.drop_collection(name)
     for name in COLLECTIONS:
         if name not in existing:
             database.create_collection(name)
@@ -127,18 +133,6 @@ def ensure_indexes(database) -> None:
         ("roleName", ASCENDING), ("personId", ASCENDING), ("movieId", ASCENDING)
     ])
     database.personCredits.create_index("sourceIds.creditId", unique=True)
-    database.companyMovies.create_index([("companyId", ASCENDING), ("movieId", ASCENDING)], unique=True)
-    database.demographicGenreStats.create_index([
-        ("genreId", ASCENDING), ("country", ASCENDING), ("ageGroup", ASCENDING)
-    ], unique=True)
-    database.demographicGenreStats.create_index([
-        ("country", ASCENDING), ("ageGroup", ASCENDING),
-        ("averageRating", DESCENDING), ("ratingCount", DESCENDING),
-    ])
-    database.companyGenreStats.create_index([
-        ("companyId", ASCENDING), ("genreId", ASCENDING)
-    ], unique=True)
-    database.companyGenreStats.create_index([("genreName", ASCENDING), ("companyId", ASCENDING)])
 
 
 def main() -> None:

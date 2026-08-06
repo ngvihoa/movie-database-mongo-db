@@ -78,13 +78,16 @@ def collect_data(database, person_name, limit, minimum_ratings, genre_name):
         "directors": ranking("Director"),
     }
 
-    q4 = list(database.demographicGenreStats.aggregate([
+    q4 = list(database.ratings.aggregate([
+        {"$unwind": "$movieSnapshot.genres"},
+        {"$group": {"_id": {"country": "$userSnapshot.country", "ageGroup": "$userSnapshot.ageGroup", "genreId": "$movieSnapshot.genres.genreId"}, "genreName": {"$first": "$movieSnapshot.genres.genreName"}, "ratingCount": {"$sum": 1}, "averageRating": {"$avg": "$rating"}}},
         {"$match": {"ratingCount": {"$gte": minimum_ratings}}},
-        {"$sort": {"country": 1, "ageGroup": 1, "averageRating": -1, "ratingCount": -1}},
-        {"$group": {"_id": {"country": "$country", "ageGroup": "$ageGroup"}, "topGenre": {"$first": "$genreName"}, "averageRating": {"$first": "$averageRating"}, "ratingCount": {"$first": "$ratingCount"}}},
+        {"$sort": {"_id.country": 1, "_id.ageGroup": 1, "averageRating": -1, "ratingCount": -1}},
+        {"$group": {"_id": {"country": "$_id.country", "ageGroup": "$_id.ageGroup"}, "topGenre": {"$first": "$genreName"}, "averageRating": {"$first": "$averageRating"}, "ratingCount": {"$first": "$ratingCount"}}},
         {"$project": {"_id": 0, "country": "$_id.country", "ageGroup": "$_id.ageGroup", "topGenre": 1, "averageRating": 1, "ratingCount": 1}},
         {"$sort": {"country": 1, "ageGroup": 1}},
-    ]))
+        {"$set": {"averageRating": {"$round": ["$averageRating", 4]}}},
+    ], allowDiskUse=True))
 
     q5 = list(database.ratings.aggregate([
         {"$match": {"movieSnapshot.genres.genreName": genre_name}},
@@ -104,13 +107,16 @@ def collect_data(database, person_name, limit, minimum_ratings, genre_name):
         {"$group": {"_id": "$genres.genreName", "totalRevenue": {"$sum": "$revenue"}}},
         {"$sort": {"totalRevenue": -1}}, {"$limit": 5},
     ])]
-    q6 = list(database.companyGenreStats.aggregate([
-        {"$match": {"genreName": {"$in": top_genres}}},
-        {"$group": {"_id": "$companyId", "companyName": {"$first": "$companyName"}, "genreStats": {"$push": {"k": "$genreName", "v": {"ratio": "$overallRevenueBudgetRatio", "movieCount": "$movieCount", "totalBudget": "$totalBudget"}}}}},
-        {"$lookup": {"from": "companies", "localField": "_id", "foreignField": "_id", "as": "company"}},
-        {"$set": {"company": {"$first": "$company"}}},
-        {"$match": {"company.companyStats.totalRevenue": {"$gt": 1_000_000_000}, "company.companyStats.totalBudget": {"$gt": 0}}},
-        {"$project": {"_id": 0, "companyName": 1, "genreStats": {"$arrayToObject": "$genreStats"}, "overallRevenueBudgetRatio": {"$round": ["$company.companyStats.revenueBudgetRatio", 4]}}},
+    q6 = list(database.movies.aggregate([
+        {"$unwind": "$companies"},
+        {"$group": {"_id": "$companies.companyId", "companyName": {"$first": "$companies.companyName"}, "totalBudget": {"$sum": {"$ifNull": ["$budget", 0]}}, "totalRevenue": {"$sum": {"$ifNull": ["$revenue", 0]}}, "movies": {"$push": {"genres": "$genres", "budget": {"$ifNull": ["$budget", 0]}, "revenue": {"$ifNull": ["$revenue", 0]}}}}},
+        {"$match": {"totalRevenue": {"$gt": 1_000_000_000}, "totalBudget": {"$gt": 0}}},
+        {"$unwind": "$movies"},
+        {"$unwind": "$movies.genres"},
+        {"$match": {"movies.genres.genreName": {"$in": top_genres}}},
+        {"$group": {"_id": {"companyId": "$_id", "genreName": "$movies.genres.genreName"}, "companyName": {"$first": "$companyName"}, "companyBudget": {"$first": "$totalBudget"}, "companyRevenue": {"$first": "$totalRevenue"}, "movieCount": {"$sum": 1}, "genreBudget": {"$sum": "$movies.budget"}, "genreRevenue": {"$sum": "$movies.revenue"}}},
+        {"$group": {"_id": "$_id.companyId", "companyName": {"$first": "$companyName"}, "totalBudget": {"$first": "$companyBudget"}, "totalRevenue": {"$first": "$companyRevenue"}, "genreStats": {"$push": {"k": "$_id.genreName", "v": {"movieCount": "$movieCount", "totalBudget": "$genreBudget", "ratio": {"$cond": [{"$gt": ["$genreBudget", 0]}, {"$round": [{"$divide": ["$genreRevenue", "$genreBudget"]}, 4]}, None]}}}}}},
+        {"$project": {"_id": 0, "companyName": 1, "genreStats": {"$arrayToObject": "$genreStats"}, "overallRevenueBudgetRatio": {"$round": [{"$divide": ["$totalRevenue", "$totalBudget"]}, 4]}}},
         {"$sort": {"overallRevenueBudgetRatio": -1}}, {"$limit": 5},
     ], allowDiskUse=True))
 

@@ -13,39 +13,62 @@ const topGenres = database.movies
   ])
   .toArray()
   .map((item) => item._id);
-const companies = database.companyGenreStats
+const companies = database.movies
   .aggregate(
     [
-      { $match: { genreName: { $in: topGenres } } },
+      { $unwind: "$companies" },
       {
         $group: {
-          _id: "$companyId",
-          companyName: { $first: "$companyName" },
-          genreStats: {
+          _id: "$companies.companyId",
+          companyName: { $first: "$companies.companyName" },
+          totalBudget: { $sum: { $ifNull: ["$budget", 0] } },
+          totalRevenue: { $sum: { $ifNull: ["$revenue", 0] } },
+          movies: {
             $push: {
-              k: "$genreName",
-              v: {
-                ratio: "$overallRevenueBudgetRatio",
-                movieCount: "$movieCount",
-                totalBudget: "$totalBudget",
-              },
+              genres: "$genres",
+              budget: { $ifNull: ["$budget", 0] },
+              revenue: { $ifNull: ["$revenue", 0] },
             },
           },
         },
       },
+      { $match: { totalRevenue: { $gt: 1000000000 }, totalBudget: { $gt: 0 } } },
+      { $unwind: "$movies" },
+      { $unwind: "$movies.genres" },
+      { $match: { "movies.genres.genreName": { $in: topGenres } } },
       {
-        $lookup: {
-          from: "companies",
-          localField: "_id",
-          foreignField: "_id",
-          as: "company",
+        $group: {
+          _id: { companyId: "$_id", genreName: "$movies.genres.genreName" },
+          companyName: { $first: "$companyName" },
+          companyBudget: { $first: "$totalBudget" },
+          companyRevenue: { $first: "$totalRevenue" },
+          movieCount: { $sum: 1 },
+          genreBudget: { $sum: "$movies.budget" },
+          genreRevenue: { $sum: "$movies.revenue" },
         },
       },
-      { $set: { company: { $first: "$company" } } },
       {
-        $match: {
-          "company.companyStats.totalRevenue": { $gt: 1000000000 },
-          "company.companyStats.totalBudget": { $gt: 0 },
+        $group: {
+          _id: "$_id.companyId",
+          companyName: { $first: "$companyName" },
+          totalBudget: { $first: "$companyBudget" },
+          totalRevenue: { $first: "$companyRevenue" },
+          genreStats: {
+            $push: {
+              k: "$_id.genreName",
+              v: {
+                movieCount: "$movieCount",
+                totalBudget: "$genreBudget",
+                ratio: {
+                  $cond: [
+                    { $gt: ["$genreBudget", 0] },
+                    { $round: [{ $divide: ["$genreRevenue", "$genreBudget"] }, 4] },
+                    null,
+                  ],
+                },
+              },
+            },
+          },
         },
       },
       {
@@ -54,7 +77,7 @@ const companies = database.companyGenreStats
           companyName: 1,
           genreStats: { $arrayToObject: "$genreStats" },
           overallRevenueBudgetRatio: {
-            $round: ["$company.companyStats.revenueBudgetRatio", 4],
+            $round: [{ $divide: ["$totalRevenue", "$totalBudget"] }, 4],
           },
         },
       },

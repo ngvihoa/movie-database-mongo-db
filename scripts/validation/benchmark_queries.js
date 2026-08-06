@@ -73,9 +73,11 @@ function rankingPipeline(role) {
 }
 
 const demographicPipeline = [
+  {$unwind: "$movieSnapshot.genres"},
+  {$group: {_id: {country: "$userSnapshot.country", ageGroup: "$userSnapshot.ageGroup", genreId: "$movieSnapshot.genres.genreId"}, genreName: {$first: "$movieSnapshot.genres.genreName"}, ratingCount: {$sum: 1}, averageRating: {$avg: "$rating"}}},
   {$match: {ratingCount: {$gte: 20}}},
-  {$sort: {country: 1, ageGroup: 1, averageRating: -1, ratingCount: -1}},
-  {$group: {_id: {country: "$country", ageGroup: "$ageGroup"}, topGenre: {$first: "$genreName"}, averageRating: {$first: "$averageRating"}, ratingCount: {$first: "$ratingCount"}}},
+  {$sort: {"_id.country": 1, "_id.ageGroup": 1, averageRating: -1, ratingCount: -1}},
+  {$group: {_id: {country: "$_id.country", ageGroup: "$_id.ageGroup"}, topGenre: {$first: "$genreName"}, averageRating: {$first: "$averageRating"}, ratingCount: {$first: "$ratingCount"}}},
   {$project: {_id: 0, country: "$_id.country", ageGroup: "$_id.ageGroup", topGenre: 1, averageRating: 1, ratingCount: 1}},
   {$sort: {country: 1, ageGroup: 1}},
 ];
@@ -95,12 +97,14 @@ const topGenres = database.movies.aggregate([
   {$sort: {totalRevenue: -1}}, {$limit: 5},
 ]).toArray().map(item => item._id);
 const companyPipeline = [
-  {$match: {genreName: {$in: topGenres}}},
-  {$group: {_id: "$companyId", companyName: {$first: "$companyName"}, genreRatios: {$push: {k: "$genreName", v: "$overallRevenueBudgetRatio"}}}},
-  {$lookup: {from: "companies", localField: "_id", foreignField: "_id", as: "company"}},
-  {$set: {company: {$first: "$company"}}},
-  {$match: {"company.companyStats.totalRevenue": {$gt: 1000000000}, "company.companyStats.totalBudget": {$gt: 0}}},
-  {$project: {_id: 0, companyName: 1, genreRatios: {$arrayToObject: "$genreRatios"}, overallRevenueBudgetRatio: {$round: ["$company.companyStats.revenueBudgetRatio", 4]}}},
+  {$unwind: "$companies"},
+  {$group: {_id: "$companies.companyId", companyName: {$first: "$companies.companyName"}, totalBudget: {$sum: {$ifNull: ["$budget", 0]}}, totalRevenue: {$sum: {$ifNull: ["$revenue", 0]}}, movies: {$push: {genres: "$genres", budget: {$ifNull: ["$budget", 0]}, revenue: {$ifNull: ["$revenue", 0]}}}}},
+  {$match: {totalRevenue: {$gt: 1000000000}, totalBudget: {$gt: 0}}},
+  {$unwind: "$movies"}, {$unwind: "$movies.genres"},
+  {$match: {"movies.genres.genreName": {$in: topGenres}}},
+  {$group: {_id: {companyId: "$_id", genreName: "$movies.genres.genreName"}, companyName: {$first: "$companyName"}, companyBudget: {$first: "$totalBudget"}, companyRevenue: {$first: "$totalRevenue"}, genreBudget: {$sum: "$movies.budget"}, genreRevenue: {$sum: "$movies.revenue"}}},
+  {$group: {_id: "$_id.companyId", companyName: {$first: "$companyName"}, totalBudget: {$first: "$companyBudget"}, totalRevenue: {$first: "$companyRevenue"}, genreRatios: {$push: {k: "$_id.genreName", v: {$cond: [{$gt: ["$genreBudget", 0]}, {$divide: ["$genreRevenue", "$genreBudget"]}, null]}}}}},
+  {$project: {_id: 0, companyName: 1, genreRatios: {$arrayToObject: "$genreRatios"}, overallRevenueBudgetRatio: {$round: [{$divide: ["$totalRevenue", "$totalBudget"]}, 4]}}},
   {$sort: {overallRevenueBudgetRatio: -1}}, {$limit: 5},
 ];
 
@@ -109,9 +113,9 @@ const results = [
   benchmarkAggregate("Q2 Person career", "people", personCareerPipeline, {allowDiskUse: true}),
   benchmarkAggregate("Q3 Actor ranking", "personCredits", rankingPipeline("Actor"), {allowDiskUse: true}),
   benchmarkAggregate("Q3 Director ranking", "personCredits", rankingPipeline("Director"), {allowDiskUse: true}),
-  benchmarkAggregate("Q4 Top genre by demographic", "demographicGenreStats", demographicPipeline),
+  benchmarkAggregate("Q4 Top genre by demographic", "ratings", demographicPipeline, {allowDiskUse: true}),
   benchmarkAggregate("Q5 Country and age report", "ratings", countryAgePipeline, {allowDiskUse: true}),
-  benchmarkAggregate("Q6 Company investment", "companyGenreStats", companyPipeline, {allowDiskUse: true}),
+  benchmarkAggregate("Q6 Company investment", "movies", companyPipeline, {allowDiskUse: true}),
 ];
 
 print(JSON.stringify({generatedAt: new Date(), database: database.getName(), topGenresForQ6: topGenres, results}, null, 2));
